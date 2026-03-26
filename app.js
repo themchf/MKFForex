@@ -1,57 +1,94 @@
-// Step 1: Fetch Free Financial Data
-// Note: You will replace 'demo' with a free API key from Alpha Vantage
-const API_KEY = 'ZN0GN6HHMFPNAOZI'; 
-const API_URL = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=GLD&apikey=${API_KEY}`;
+// --- CONFIGURATION ---
+// 1. Get your FREE Key at: https://www.alphavantage.co/support/#api-key
+const GOLD_API_KEY = 'ZN0GN6HHMFPNAOZI'; 
 
-async function fetchMarketData() {
+// 2. Get your FREE Key at: https://gnews.io/ (Allows GitHub Pages)
+const NEWS_API_KEY = '739dc21c92bf475f8e590d305024929d'; 
+
+// --- FETCH GOLD PRICE (XAU/USD) ---
+async function fetchGoldPrice() {
+    // We use CURRENCY_EXCHANGE_RATE because it's the professional way to get spot Gold
+    const url = `https://www.alphavantage.co/query?function=CURRENCY_EXCHANGE_RATE&from_currency=XAU&to_currency=USD&apikey=${GOLD_API_KEY}`;
+    
     try {
-        const response = await fetch(API_URL);
+        const response = await fetch(url);
         const data = await response.json();
-        const price = data['Global Quote']['05. price'];
-        document.getElementById('current-price').innerText = `$${parseFloat(price).toFixed(2)}`;
+
+        // Handle Alpha Vantage Rate Limits
+        if (data["Note"]) {
+            alert("API Limit Reached (25/day). Please wait a minute or use a new key.");
+            return null;
+        }
+
+        const price = data["Realtime Currency Exchange Rate"]["5. Exchange Rate"];
+        document.getElementById('current-price').innerText = `$${parseFloat(price).toLocaleString()}`;
         return parseFloat(price);
     } catch (error) {
-        console.error("Error fetching data:", error);
-        document.getElementById('current-price').innerText = "Error";
+        console.error("Gold Fetch Error:", error);
+        document.getElementById('current-price').innerText = "Limit Reached";
         return null;
     }
 }
 
-// Step 2: The Client-Side Neural Network
-async function runPredictionEngine() {
-    document.getElementById('prediction-output').innerText = "Training Model...";
+// --- FETCH POLITICAL NEWS & SENTIMENT ---
+async function getPoliticalSentiment() {
+    const url = `https://gnews.io/api/v4/search?q="gold price" OR "geopolitics"&lang=en&apikey=${NEWS_API_KEY}`;
     
-    // 1. Get the latest data
-    const currentPrice = await fetchMarketData();
-    if (!currentPrice) return;
+    try {
+        const response = await fetch(url);
+        const data = await response.json();
+        
+        if (!data.articles) return 0;
 
-    // 2. Define a simple Sequential Model in TensorFlow.js
-    const model = tf.sequential();
-    model.add(tf.layers.dense({units: 1, inputShape: [1]}));
-    model.compile({loss: 'meanSquaredError', optimizer: 'sgd'});
+        let score = 0;
+        // Keywords that usually make Gold (Safe Haven) go UP
+        const bullish = ['war', 'inflation', 'crisis', 'conflict', 'uncertainty', 'rates cut', 'debt'];
+        const bearish = ['recovery', 'stability', 'growth', 'rates hike', 'peace'];
 
-    // 3. Mock Historical Training Data (Time, Price adjustments)
-    // In a full build, you would fetch an array of the last 100 days of prices here.
-    const xs = tf.tensor2d([1, 2, 3, 4], [4, 1]); // Time steps
-    const ys = tf.tensor2d([currentPrice - 3, currentPrice - 2, currentPrice - 1, currentPrice], [4, 1]); // Price trend
+        data.articles.forEach(article => {
+            const text = (article.title + article.description).toLowerCase();
+            bullish.forEach(word => { if(text.includes(word)) score += 1.5; });
+            bearish.forEach(word => { if(text.includes(word)) score -= 1.5; });
+        });
 
-    // 4. Train the model quickly in the browser
-    await model.fit(xs, ys, {epochs: 50});
-
-    // 5. Predict the next time step (Day 5)
-    const prediction = model.predict(tf.tensor2d([5], [1, 1]));
-    const predictedValue = prediction.dataSync()[0];
-
-    // Update the UI
-    const outputElement = document.getElementById('prediction-output');
-    outputElement.innerText = `$${predictedValue.toFixed(2)}`;
-    
-    if (predictedValue > currentPrice) {
-        outputElement.style.color = "#00e676"; // Bullish (Green)
-    } else {
-        outputElement.style.color = "#ff5252"; // Bearish (Red)
+        return score;
+    } catch (e) {
+        return 0;
     }
 }
 
-// Initialize data on load
-window.onload = fetchMarketData;
+// --- THE PREDICTION BRAIN ---
+async function runPredictionEngine() {
+    const output = document.getElementById('prediction-output');
+    output.innerText = "Analyzing Geopolitics...";
+
+    const price = await fetchGoldPrice();
+    if (!price) return;
+
+    const sentiment = await getPoliticalSentiment();
+
+    // Create a Brain (TensorFlow.js)
+    const model = tf.sequential();
+    model.add(tf.layers.dense({units: 12, inputShape: [2], activation: 'relu'}));
+    model.add(tf.layers.dense({units: 1}));
+    model.compile({loss: 'meanSquaredError', optimizer: 'adam'});
+
+    // Teach it: If Sentiment is High, Price usually goes High
+    const training_in = tf.tensor2d([[price, 0], [price, 5], [price, -5]]);
+    const training_out = tf.tensor2d([[price], [price + 10], [price - 10]]);
+
+    await model.fit(training_in, training_out, {epochs: 150});
+
+    // Run the live prediction
+    const live_input = tf.tensor2d([[price, sentiment]]);
+    const prediction = model.predict(live_input);
+    const finalResult = prediction.dataSync()[0];
+
+    // Update UI
+    const change = finalResult - price;
+    output.innerText = change > 0 ? `BULLISH (+$${change.toFixed(2)})` : `BEARISH (-$${Math.abs(change).toFixed(2)})`;
+    output.style.color = change > 0 ? "#00e676" : "#ff5252";
+}
+
+// Start price on load
+window.onload = fetchGoldPrice;
