@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Forex & Gold Predictor AI</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Gold (XAU/USD) Predictor Engine</h1>
+            <p>Processing real-time data and market sentiment...</p>
+        </header>
+
+        <div class="dashboard">
+            <div class="card">
+                <h2>Current Price</h2>
+                <p id="current-price" class="data-point">Loading...</p>
+            </div>
+            <div class="card">
+                <h2>AI Forecast (Next 24h)</h2>
+                <p id="prediction-output" class="data-point highlight">Awaiting Data...</p>
+            </div>
+        </div>
+
+        <button id="predict-btn" onclick="runPredictionEngine()">Run AI Analysis</button>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
