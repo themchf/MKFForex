@@ -65,15 +65,72 @@ async function getPoliticalSentiment() {
 }
 
 // --- THE AI PREDICTION BRAIN ---
+// --- GLOBAL AI BRAIN ---
+let aiModel;
+
+// 1. INITIALIZE THE BRAIN ONCE
+async function initAI() {
+    aiModel = tf.sequential();
+    aiModel.add(tf.layers.dense({units: 8, inputShape: [2], activation: 'relu'}));
+    aiModel.add(tf.layers.dense({units: 1}));
+    aiModel.compile({loss: 'meanSquaredError', optimizer: tf.train.adam(0.01)});
+    console.log("AI Brain Initialized");
+}
+
+// 2. STABILIZED PREDICTION LOGIC
 async function runPredictionEngine() {
     const output = document.getElementById('prediction-output');
-    output.innerText = "Analyzing Geopolitics...";
+    output.innerText = "Analyzing Market...";
 
     const price = await fetchGoldPrice();
     if (!price) return;
 
     const sentiment = await getPoliticalSentiment();
 
+    // Instead of random training, we use a "Pattern-Based" weight
+    // This ensures the AI understands: High Sentiment = Upward Pressure
+    const xs = tf.tensor2d([
+        [price, 0],    // Neutral
+        [price, 10],   // High Crisis
+        [price, -10]   // High Stability
+    ]);
+    
+    // We define a logical "Future" for the AI to learn from
+    const ys = tf.tensor2d([
+        [price + 0.5],    // Neutral: Slight natural growth
+        [price + 12.0],   // Crisis: Gold jumps
+        [price - 8.0]     // Stability: Gold drops
+    ]);
+
+    // Train the existing brain (This makes it smarter over time instead of resetting)
+    await aiModel.fit(xs, ys, {epochs: 20});
+
+    // Run the prediction
+    const live_input = tf.tensor2d([[price, sentiment]]);
+    const prediction = aiModel.predict(live_input);
+    const predictedValue = prediction.dataSync()[0];
+
+    // --- DISPLAY LOGIC ---
+    const change = predictedValue - price;
+    
+    // We add a "Confidence" check: if the change is tiny, we call it "STABLE"
+    if (Math.abs(change) < 0.20) {
+        output.innerText = `STABLE ($${predictedValue.toFixed(2)})`;
+        output.style.color = "#ffd700"; // Gold color
+    } else if (change > 0) {
+        output.innerText = `BULLISH (+$${change.toFixed(2)})`;
+        output.style.color = "#00e676";
+    } else {
+        output.innerText = `BEARISH (-$${Math.abs(change).toFixed(2)})`;
+        output.style.color = "#ff5252";
+    }
+}
+
+// Initialize everything when the window loads
+window.onload = async () => {
+    await initAI();
+    fetchGoldPrice();
+}
     // Neural Network Architecture
     const model = tf.sequential();
     model.add(tf.layers.dense({units: 16, inputShape: [2], activation: 'relu'}));
