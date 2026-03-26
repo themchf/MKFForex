@@ -1,6 +1,6 @@
 // Step 1: Fetch Free Financial Data
 // Note: You will replace 'demo' with a free API key from Alpha Vantage
-const API_KEY = '1DZBKLP8URPWHDC5'; 
+const API_KEY = 'ZN0GN6HHMFPNAOZI'; 
 const API_URL = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=GLD&apikey=${API_KEY}`;
 
 async function fetchMarketData() {
