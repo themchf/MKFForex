@@ -1,63 +1,70 @@
 // --- CONFIGURATION ---
-// 1. Get your FREE Key at: https://www.alphavantage.co/support/#api-key
-const GOLD_API_KEY = 'ZN0GN6HHMFPNAOZI'; 
+const GOLD_API_KEY = '6d5182dc3f0442efa625221f3c350233'; // Get at twelvedata.com
+const NEWS_API_KEY = 'cdd1b7b064eef56e8369f619696196c6';      // Get at gnews.io
 
-// 2. Get your FREE Key at: https://gnews.io/ (Allows GitHub Pages)
-const NEWS_API_KEY = '739dc21c92bf475f8e590d305024929d'; 
+// --- SMART CACHING LOGIC ---
+function getCachedPrice() {
+    const cached = localStorage.getItem('gold_price');
+    const time = localStorage.getItem('gold_price_time');
+    if (cached && (Date.now() - time < 60000)) return parseFloat(cached);
+    return null;
+}
 
 // --- FETCH GOLD PRICE (XAU/USD) ---
 async function fetchGoldPrice() {
-    // We use CURRENCY_EXCHANGE_RATE because it's the professional way to get spot Gold
-    const url = `https://www.alphavantage.co/query?function=CURRENCY_EXCHANGE_RATE&from_currency=XAU&to_currency=USD&apikey=${GOLD_API_KEY}`;
+    const cachedPrice = getCachedPrice();
+    if (cachedPrice) {
+        document.getElementById('current-price').innerText = `$${cachedPrice.toLocaleString()}`;
+        return cachedPrice;
+    }
+
+    const url = `https://api.twelvedata.com/price?symbol=XAU/USD&apikey=${GOLD_API_KEY}`;
     
     try {
         const response = await fetch(url);
         const data = await response.json();
 
-        // Handle Alpha Vantage Rate Limits
-        if (data["Note"]) {
-            alert("API Limit Reached (25/day). Please wait a minute or use a new key.");
+        if (data.code === 429) {
+            document.getElementById('current-price').innerText = "Cooldown...";
             return null;
         }
 
-        const price = data["Realtime Currency Exchange Rate"]["5. Exchange Rate"];
-        document.getElementById('current-price').innerText = `$${parseFloat(price).toLocaleString()}`;
-        return parseFloat(price);
+        const price = parseFloat(data.price);
+        // Save to cache
+        localStorage.setItem('gold_price', price);
+        localStorage.setItem('gold_price_time', Date.now());
+        
+        document.getElementById('current-price').innerText = `$${price.toLocaleString()}`;
+        return price;
     } catch (error) {
-        console.error("Gold Fetch Error:", error);
-        document.getElementById('current-price').innerText = "Limit Reached";
+        document.getElementById('current-price').innerText = "Offline";
         return null;
     }
 }
 
 // --- FETCH POLITICAL NEWS & SENTIMENT ---
 async function getPoliticalSentiment() {
-    const url = `https://gnews.io/api/v4/search?q="gold price" OR "geopolitics"&lang=en&apikey=${NEWS_API_KEY}`;
+    // We target "War", "Central Banks", and "Inflation" - the 3 things that move Gold
+    const url = `https://gnews.io/api/v4/search?q="geopolitics" OR "inflation" OR "central bank"&lang=en&apikey=${NEWS_API_KEY}`;
     
     try {
         const response = await fetch(url);
         const data = await response.json();
-        
-        if (!data.articles) return 0;
-
         let score = 0;
-        // Keywords that usually make Gold (Safe Haven) go UP
-        const bullish = ['war', 'inflation', 'crisis', 'conflict', 'uncertainty', 'rates cut', 'debt'];
-        const bearish = ['recovery', 'stability', 'growth', 'rates hike', 'peace'];
+
+        const bullish = ['war', 'conflict', 'crisis', 'inflation', 'recession', 'debt', 'sanctions'];
+        const bearish = ['growth', 'recovery', 'stable', 'peace', 'deal', 'strong dollar'];
 
         data.articles.forEach(article => {
-            const text = (article.title + article.description).toLowerCase();
-            bullish.forEach(word => { if(text.includes(word)) score += 1.5; });
-            bearish.forEach(word => { if(text.includes(word)) score -= 1.5; });
+            const content = (article.title + article.description).toLowerCase();
+            bullish.forEach(w => { if(content.includes(w)) score += 2; });
+            bearish.forEach(w => { if(content.includes(w)) score -= 2; });
         });
-
         return score;
-    } catch (e) {
-        return 0;
-    }
+    } catch (e) { return 0; }
 }
 
-// --- THE PREDICTION BRAIN ---
+// --- THE AI PREDICTION BRAIN ---
 async function runPredictionEngine() {
     const output = document.getElementById('prediction-output');
     output.innerText = "Analyzing Geopolitics...";
@@ -67,28 +74,26 @@ async function runPredictionEngine() {
 
     const sentiment = await getPoliticalSentiment();
 
-    // Create a Brain (TensorFlow.js)
+    // Neural Network Architecture
     const model = tf.sequential();
-    model.add(tf.layers.dense({units: 12, inputShape: [2], activation: 'relu'}));
+    model.add(tf.layers.dense({units: 16, inputShape: [2], activation: 'relu'}));
     model.add(tf.layers.dense({units: 1}));
     model.compile({loss: 'meanSquaredError', optimizer: 'adam'});
 
-    // Teach it: If Sentiment is High, Price usually goes High
-    const training_in = tf.tensor2d([[price, 0], [price, 5], [price, -5]]);
-    const training_out = tf.tensor2d([[price], [price + 10], [price - 10]]);
+    // Training Data: The AI learns that High Sentiment (Crisis) = Higher Gold Price
+    const training_in = tf.tensor2d([[price, 0], [price, 10], [price, -10]]);
+    const training_out = tf.tensor2d([[price], [price + 15], [price - 15]]);
 
-    await model.fit(training_in, training_out, {epochs: 150});
+    await model.fit(training_in, training_out, {epochs: 100});
 
-    // Run the live prediction
     const live_input = tf.tensor2d([[price, sentiment]]);
     const prediction = model.predict(live_input);
-    const finalResult = prediction.dataSync()[0];
+    const result = prediction.dataSync()[0];
 
-    // Update UI
-    const change = finalResult - price;
-    output.innerText = change > 0 ? `BULLISH (+$${change.toFixed(2)})` : `BEARISH (-$${Math.abs(change).toFixed(2)})`;
-    output.style.color = change > 0 ? "#00e676" : "#ff5252";
+    // UI Output
+    const diff = result - price;
+    output.innerText = diff > 0 ? `BULLISH (+$${diff.toFixed(2)})` : `BEARISH (-$${Math.abs(diff).toFixed(2)})`;
+    output.style.color = diff > 0 ? "#00e676" : "#ff5252";
 }
 
-// Start price on load
 window.onload = fetchGoldPrice;
