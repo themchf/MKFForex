@@ -1,0 +1,33 @@
+name: Market Data Pipeline
+
+# Run every hour, and allow manual triggering
+on:
+  schedule:
+    - cron: '0 * * * *' 
+  workflow_dispatch:
+
+jobs:
+  update-data:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Run Data Pipeline
+        env:
+          GOLD_API_KEY: ${{ secrets.GOLD_API_KEY }}
+          NEWS_API_KEY: ${{ secrets.NEWS_API_KEY }}
+        run: node fetch-data.js
+
+      - name: Commit and Push Data
+        run: |
+          git config --global user.name "Market AI Bot"
+          git config --global user.email "bot@market-ai.com"
+          git add market-data.json
+          git commit -m "Automated update of market data" || exit 0
+          git push
